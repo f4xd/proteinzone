@@ -1,22 +1,6 @@
 // filepath: frontend/src/app/api/products/[id]/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { neon } from '@neondatabase/serverless';
-
-const getDatabaseUrl = () => {
-  if (process.env.DATABASE_URL) return process.env.DATABASE_URL;
-  if (process.env.POSTGRES_URL) return process.env.POSTGRES_URL;
-  if (process.env.POSTGRES_PRISMA_URL) return process.env.POSTGRES_PRISMA_URL;
-  const host = process.env.POSTGRES_HOST;
-  const user = process.env.POSTGRES_USER;
-  const password = process.env.POSTGRES_PASSWORD;
-  const database = process.env.POSTGRES_DATABASE;
-  if (host && user && password && database) {
-    return `postgres://${user}:${password}@${host}:5432/${database}?sslmode=require`;
-  }
-  throw new Error('DATABASE_URL not configured');
-};
-
-const sql = neon(getDatabaseUrl());
+import { sql } from '@vercel/postgres';
 
 export async function GET(
   request: NextRequest,
