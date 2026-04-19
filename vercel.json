@@ -1,0 +1,8 @@
+{
+  "functions": {
+    "src/app/api/**/*.ts": {
+      "runtime": "nodejs22.x",
+      "memory": "1024MB"
+    }
+  }
+}

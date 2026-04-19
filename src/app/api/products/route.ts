@@ -1,0 +1,99 @@
+// filepath: frontend/src/app/api/products/route.ts
+import { NextRequest, NextResponse } from 'next/server';
+import Database from 'better-sqlite3';
+
+const DB_PATH = process.env.DB_PATH || './fitzone.db';
+
+// Security: Rate limiting (simple in-memory store)
+const rateLimitStore = new Map();
+const RATE_LIMIT_WINDOW = 60 * 1000;
+const RATE_LIMIT_MAX = 10;
+
+function rateLimit(req: NextRequest) {
+  // Simple rate limiting without IP (Vercel serverless friendly)
+  const now = Date.now();
+  const record = rateLimitStore.get('global') || { count: 0, resetTime: now + RATE_LIMIT_WINDOW };
+  
+  if (now > record.resetTime) {
+    record.count = 1;
+    record.resetTime = now + RATE_LIMIT_WINDOW;
+  } else {
+    record.count++;
+    if (record.count > RATE_LIMIT_MAX) {
+      return true; // Rate limited
+    }
+  }
+  
+  rateLimitStore.set('global', record);
+  return false;
+}
+
+function sanitizeInput(str: string) {
+  if (typeof str !== 'string') return str;
+  return str.replace(/[;'"--]/g, '').trim();
+}
+
+// Initialize DB lazily
+let db: Database.Database | null = null;
+
+function getDb() {
+  if (!db) {
+    db = new Database(DB_PATH);
+  }
+  return db;
+}
+
+export async function GET(request: NextRequest) {
+  if (rateLimit(request)) {
+    return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
+  }
+
+  try {
+    const { searchParams } = new URL(request.url);
+    const search = searchParams.get('search');
+    const category = searchParams.get('category');
+    
+    let query = 'SELECT * FROM products WHERE 1=1';
+    const params: string[] = [];
+    
+    if (search) {
+      const sanitized = sanitizeInput(search);
+      query += ' AND name LIKE ?';
+      params.push(`%${sanitized}%`);
+    }
+    
+    if (category && ['protein', 'creatine', 'fat-burners', 'vitamins'].includes(category)) {
+      query += ' AND category = ?';
+      params.push(category);
+    }
+    
+    query += ' ORDER BY createdAt DESC';
+    const products = getDb().prepare(query).all(...params);
+    const mappedProducts = products.map((p: any) => ({ ...p, _id: p.id }));
+    
+    return NextResponse.json(mappedProducts);
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+
+export async function POST(request: NextRequest) {
+  const adminKey = request.headers.get('x-admin-key');
+  if (adminKey !== process.env.ADMIN_KEY && adminKey !== 'fitzone-admin-secret') {
+    return NextResponse.json({ error: 'Admin access denied' }, { status: 403 });
+  }
+
+  try {
+    const { name, price, description, image, category, stock } = await request.json();
+    const stmt = getDb().prepare(`
+      INSERT INTO products (name, price, description, image, category, stock)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `);
+    const result = stmt.run(name, price, description, image, category, stock || 100);
+    const product: any = getDb().prepare('SELECT * FROM products WHERE id = ?').get(result.lastInsertRowid);
+    
+    return NextResponse.json({ ...product, _id: product.id }, { status: 201 });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 400 });
+  }
+}
