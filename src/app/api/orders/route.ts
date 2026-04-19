@@ -1,17 +1,8 @@
 // filepath: frontend/src/app/api/orders/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import Database from 'better-sqlite3';
+import { neon } from '@neondatabase/serverless';
 
-const DB_PATH = process.env.DB_PATH || './fitzone.db';
-
-let db: Database.Database | null = null;
-
-function getDb() {
-  if (!db) {
-    db = new Database(DB_PATH);
-  }
-  return db;
-}
+const sql = neon(process.env.DATABASE_URL!);
 
 // Security: Rate limiting
 const rateLimitStore = new Map();
@@ -19,7 +10,6 @@ const RATE_LIMIT_WINDOW = 60 * 1000;
 const RATE_LIMIT_MAX = 10;
 
 function rateLimit(req: NextRequest) {
-  // Simple rate limiting without IP (Vercel serverless friendly)
   const now = Date.now();
   const record = rateLimitStore.get('global') || { count: 0, resetTime: now + RATE_LIMIT_WINDOW };
   
@@ -49,7 +39,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const orders = getDb().prepare('SELECT * FROM orders ORDER BY createdAt DESC').all();
+    const orders = await sql('SELECT * FROM orders ORDER BY created_at DESC');
     return NextResponse.json(orders);
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -82,16 +72,18 @@ export async function POST(request: NextRequest) {
     for (const item of items) {
       if (!item.productId || !item.quantity) continue;
       
-      const product = getDb().prepare('SELECT * FROM products WHERE id = ?').get(item.productId);
+      const products = await sql('SELECT * FROM products WHERE id = $1', [item.productId]);
+      const product = products[0];
+      
       if (product) {
-        const price = (product as any).price;
+        const price = product.price;
         totalPrice += price * item.quantity;
         enrichedItems.push({
           productId: String(item.productId),
-          name: (product as any).name,
+          name: product.name,
           price: price,
           quantity: item.quantity,
-          image: (product as any).image
+          image: product.image
         });
       }
     }
@@ -101,22 +93,16 @@ export async function POST(request: NextRequest) {
     }
 
     // Save order to database
-    const stmt = getDb().prepare(`
-      INSERT INTO orders (fullName, phone, address, items, totalPrice)
-      VALUES (?, ?, ?, ?, ?)
-    `);
-    
-    const result = stmt.run(
-      sanitizedName,
-      sanitizedPhone,
-      sanitizedAddress,
-      JSON.stringify(enrichedItems),
-      totalPrice
+    const result = await sql(
+      `INSERT INTO orders (full_name, phone, address, items, total_price, created_at)
+       VALUES ($1, $2, $3, $4, $5, NOW())
+       RETURNING id`,
+      [sanitizedName, sanitizedPhone, sanitizedAddress, JSON.stringify(enrichedItems), totalPrice]
     );
 
     return NextResponse.json({
       message: 'Order created successfully',
-      orderId: result.lastInsertRowid,
+      orderId: result[0].id,
       totalPrice: totalPrice
     }, { status: 201 });
   } catch (error: any) {
