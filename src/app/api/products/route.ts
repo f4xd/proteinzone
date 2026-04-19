@@ -1,8 +1,8 @@
 // filepath: frontend/src/app/api/products/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import Database from 'better-sqlite3';
+import { neon } from '@neondatabase/serverless';
 
-const DB_PATH = process.env.DB_PATH || './fitzone.db';
+const sql = neon(process.env.DATABASE_URL!);
 
 // Security: Rate limiting (simple in-memory store)
 const rateLimitStore = new Map();
@@ -10,7 +10,6 @@ const RATE_LIMIT_WINDOW = 60 * 1000;
 const RATE_LIMIT_MAX = 10;
 
 function rateLimit(req: NextRequest) {
-  // Simple rate limiting without IP (Vercel serverless friendly)
   const now = Date.now();
   const record = rateLimitStore.get('global') || { count: 0, resetTime: now + RATE_LIMIT_WINDOW };
   
@@ -20,7 +19,7 @@ function rateLimit(req: NextRequest) {
   } else {
     record.count++;
     if (record.count > RATE_LIMIT_MAX) {
-      return true; // Rate limited
+      return true;
     }
   }
   
@@ -31,16 +30,6 @@ function rateLimit(req: NextRequest) {
 function sanitizeInput(str: string) {
   if (typeof str !== 'string') return str;
   return str.replace(/[;'"--]/g, '').trim();
-}
-
-// Initialize DB lazily
-let db: Database.Database | null = null;
-
-function getDb() {
-  if (!db) {
-    db = new Database(DB_PATH);
-  }
-  return db;
 }
 
 export async function GET(request: NextRequest) {
@@ -58,18 +47,22 @@ export async function GET(request: NextRequest) {
     
     if (search) {
       const sanitized = sanitizeInput(search);
-      query += ' AND name LIKE ?';
+      query += ' AND name LIKE $' + (params.length + 1);
       params.push(`%${sanitized}%`);
     }
     
     if (category && ['protein', 'creatine', 'fat-burners', 'vitamins'].includes(category)) {
-      query += ' AND category = ?';
+      query += ' AND category = $' + (params.length + 1);
       params.push(category);
     }
     
-    query += ' ORDER BY createdAt DESC';
-    const products = getDb().prepare(query).all(...params);
-    const mappedProducts = products.map((p: any) => ({ ...p, _id: p.id }));
+    query += ' ORDER BY created_at DESC';
+    const products = await sql(query, params);
+    const mappedProducts = products.map((p: any) => ({ 
+      ...p, 
+      _id: p.id,
+      createdAt: p.created_at 
+    }));
     
     return NextResponse.json(mappedProducts);
   } catch (error: any) {
@@ -85,13 +78,15 @@ export async function POST(request: NextRequest) {
 
   try {
     const { name, price, description, image, category, stock } = await request.json();
-    const stmt = getDb().prepare(`
-      INSERT INTO products (name, price, description, image, category, stock)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `);
-    const result = stmt.run(name, price, description, image, category, stock || 100);
-    const product: any = getDb().prepare('SELECT * FROM products WHERE id = ?').get(result.lastInsertRowid);
     
+    const result = await sql(
+      `INSERT INTO products (name, price, description, image, category, stock, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, NOW())
+       RETURNING *`,
+      [name, price, description, image, category, stock || 100]
+    );
+    
+    const product = result[0];
     return NextResponse.json({ ...product, _id: product.id }, { status: 201 });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 400 });
