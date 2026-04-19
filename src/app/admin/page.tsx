@@ -11,17 +11,18 @@ interface Product {
   price: number;
   category: string;
   stock: number;
+  created_at?: string;
 }
 
 interface Order {
   id: number;
-  fullName: string;
+  full_name: string;
   phone: string;
   address: string;
   items: string;
-  totalPrice: number;
+  total_price: number;
   status: string;
-  createdAt: string;
+  created_at: string;
 }
 
 export default function AdminPage() {
@@ -277,7 +278,7 @@ export default function AdminPage() {
                   <div className="flex justify-between items-start mb-4">
                     <div>
                       <h3 className="text-lg font-bold text-white">Order #{order.id}</h3>
-                      <p className="text-[#a3a3a3] text-sm">{order.createdAt}</p>
+                      <p className="text-[#a3a3a3] text-sm">{order.created_at}</p>
                     </div>
                     <span className={`px-3 py-1 rounded-full text-sm ${
                       order.status === 'pending' ? 'bg-yellow-500/20 text-yellow-500' :
@@ -289,12 +290,12 @@ export default function AdminPage() {
                   </div>
                   <div className="grid md:grid-cols-2 gap-4 text-sm">
                     <div>
-                      <p className="text-[#a3a3a3]">Customer: <span className="text-white">{order.fullName}</span></p>
+                      <p className="text-[#a3a3a3]">Customer: <span className="text-white">{order.full_name}</span></p>
                       <p className="text-[#a3a3a3]">Phone: <span className="text-white">{order.phone}</span></p>
                       <p className="text-[#a3a3a3]">Address: <span className="text-white">{order.address}</span></p>
                     </div>
                     <div>
-                      <p className="text-[#a3a3a3]">Total: <span className="text-[#00ff88] font-bold">{order.totalPrice.toLocaleString()} DZD</span></p>
+                      <p className="text-[#a3a3a3]">Total: <span className="text-[#00ff88] font-bold">{order.total_price.toLocaleString()} DZD</span></p>
                       <p className="text-[#a3a3a3]">Items: <span className="text-white">{order.items}</span></p>
                     </div>
                   </div>
