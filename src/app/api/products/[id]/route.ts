@@ -4,6 +4,8 @@ import { neon } from '@neondatabase/serverless';
 
 const getDatabaseUrl = () => {
   if (process.env.DATABASE_URL) return process.env.DATABASE_URL;
+  if (process.env.POSTGRES_URL) return process.env.POSTGRES_URL;
+  if (process.env.POSTGRES_PRISMA_URL) return process.env.POSTGRES_PRISMA_URL;
   const host = process.env.POSTGRES_HOST;
   const user = process.env.POSTGRES_USER;
   const password = process.env.POSTGRES_PASSWORD;
