@@ -2,11 +2,29 @@
 import { NextResponse } from 'next/server';
 import { neon } from '@neondatabase/serverless';
 
-const sql = neon(process.env.DATABASE_URL!);
+// Use DATABASE_URL or build from individual Supabase env vars
+const getDatabaseUrl = () => {
+  if (process.env.DATABASE_URL) return process.env.DATABASE_URL;
+  
+  // Build from individual Supabase vars if available
+  const host = process.env.POSTGRES_HOST;
+  const user = process.env.POSTGRES_USER;
+  const password = process.env.POSTGRES_PASSWORD;
+  const database = process.env.POSTGRES_DATABASE;
+  
+  if (host && user && password && database) {
+    return `postgres://${user}:${password}@${host}:5432/${database}?sslmode=require`;
+  }
+  
+  throw new Error('DATABASE_URL not configured');
+};
+
+const sql = neon(getDatabaseUrl());
 
 export async function GET() {
   try {
-    // Create tables with Postgres syntax
+    // Test connection first
+    await sql`SELECT 1`;
     await sql(`
       CREATE TABLE IF NOT EXISTS products (
         id SERIAL PRIMARY KEY,
