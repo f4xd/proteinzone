@@ -1,44 +1,43 @@
 // filepath: frontend/src/app/api/setup/route.ts
 import { NextResponse } from 'next/server';
-import Database from 'better-sqlite3';
-import path from 'path';
+import { neon } from '@neondatabase/serverless';
 
-const DB_PATH = process.env.DB_PATH || path.join(process.cwd(), 'fitzone.db');
+const sql = neon(process.env.DATABASE_URL!);
 
 export async function GET() {
   try {
-    const db = new Database(DB_PATH);
-    
-    // Create tables
-    db.exec(`
+    // Create tables with Postgres syntax
+    await sql(`
       CREATE TABLE IF NOT EXISTS products (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id SERIAL PRIMARY KEY,
         name TEXT NOT NULL,
         price REAL NOT NULL,
         description TEXT,
         image TEXT,
         category TEXT NOT NULL,
         stock INTEGER DEFAULT 100,
-        createdAt TEXT DEFAULT CURRENT_TIMESTAMP
-      );
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
 
+    await sql(`
       CREATE TABLE IF NOT EXISTS orders (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        fullName TEXT NOT NULL,
+        id SERIAL PRIMARY KEY,
+        full_name TEXT NOT NULL,
         phone TEXT NOT NULL,
         address TEXT NOT NULL,
         items TEXT NOT NULL,
-        totalPrice REAL NOT NULL,
+        total_price REAL NOT NULL,
         status TEXT DEFAULT 'pending',
-        createdAt TEXT DEFAULT CURRENT_TIMESTAMP
-      );
+        created_at TIMESTAMP DEFAULT NOW()
+      )
     `);
 
     // Seed products if empty
-    const count = db.prepare('SELECT COUNT(*) as count FROM products').get() as { count: number };
+    const products = await sql('SELECT COUNT(*) as count FROM products');
     
-    if (count.count === 0) {
-      const products = [
+    if (products[0].count === 0) {
+      const seedProducts = [
         { name: 'Whey Protein Pro', price: 4500, description: 'Premium whey protein for muscle building. 24g protein per serving.', image: 'https://images.unsplash.com/photo-1593095948071-474c5cc2989d?w=400', category: 'protein', stock: 50 },
         { name: 'Creatine Monohydrate', price: 2500, description: 'Pure creatine monohydrate for strength and power. 5g per serving.', image: 'https://images.unsplash.com/photo-1571019614242-c5c5dee9f50b?w=400', category: 'creatine', stock: 80 },
         { name: 'Fat Burner Extreme', price: 3200, description: 'Advanced thermogenic fat burner. Boost metabolism and energy.', image: 'https://images.unsplash.com/photo-1579722820308-d74b5711e8c4?w=400', category: 'fat-burners', stock: 40 },
@@ -51,17 +50,15 @@ export async function GET() {
         { name: 'L-Carnitine', price: 2600, description: 'Fat metabolism support. Helps convert fat to energy.', image: 'https://images.unsplash.com/photo-1622484212028-5f1bfc57c420?w=400', category: 'fat-burners', stock: 55 },
       ];
 
-      const stmt = db.prepare(`
-        INSERT INTO products (name, price, description, image, category, stock)
-        VALUES (?, ?, ?, ?, ?, ?)
-      `);
-
-      for (const p of products) {
-        stmt.run(p.name, p.price, p.description, p.image, p.category, p.stock);
+      for (const p of seedProducts) {
+        await sql(
+          `INSERT INTO products (name, price, description, image, category, stock, created_at)
+           VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+          [p.name, p.price, p.description, p.image, p.category, p.stock]
+        );
       }
     }
 
-    db.close();
     return NextResponse.json({ message: 'Database initialized successfully' });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
