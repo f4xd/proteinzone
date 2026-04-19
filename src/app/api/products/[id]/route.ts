@@ -1,17 +1,8 @@
 // filepath: frontend/src/app/api/products/[id]/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import Database from 'better-sqlite3';
+import { neon } from '@neondatabase/serverless';
 
-const DB_PATH = process.env.DB_PATH || './fitzone.db';
-
-let db: Database.Database | null = null;
-
-function getDb() {
-  if (!db) {
-    db = new Database(DB_PATH);
-  }
-  return db;
-}
+const sql = neon(process.env.DATABASE_URL!);
 
 export async function GET(
   request: NextRequest,
@@ -19,7 +10,8 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const product: any = getDb().prepare('SELECT * FROM products WHERE id = ?').get(id);
+    const products = await sql('SELECT * FROM products WHERE id = $1', [id]);
+    const product = products[0];
     
     if (!product) {
       return NextResponse.json({ error: 'Product not found' }, { status: 404 });
@@ -42,10 +34,9 @@ export async function DELETE(
 
   try {
     const { id } = await params;
-    const stmt = getDb().prepare('DELETE FROM products WHERE id = ?');
-    const result = stmt.run(id);
+    const result = await sql('DELETE FROM products WHERE id = $1 RETURNING id', [id]);
     
-    if (result.changes === 0) {
+    if (result.length === 0) {
       return NextResponse.json({ error: 'Product not found' }, { status: 404 });
     }
     
