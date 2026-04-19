@@ -51,6 +51,17 @@ export default function Header() {
                 </span>
               )}
             </Link>
+            <Link 
+              href="/admin" 
+              className={`font-medium transition-colors ${
+                isActive('/admin') ? 'text-[#00ff88]' : 'text-white hover:text-[#00ff88]'
+              }`}
+            >
+              Admin
+            </Link>
+                </span>
+              )}
+            </Link>
           </nav>
 
           {/* Mobile Cart Icon */}
