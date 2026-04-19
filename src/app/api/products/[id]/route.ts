@@ -1,6 +1,11 @@
 // filepath: frontend/src/app/api/products/[id]/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { sql } from '@vercel/postgres';
+import { Pool } from 'pg';
+
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL || process.env.POSTGRES_URL,
+  ssl: { rejectUnauthorized: false }
+});
 
 export async function GET(
   request: NextRequest,
@@ -8,8 +13,8 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const products = await sql('SELECT * FROM products WHERE id = $1', [id]);
-    const product = products[0];
+    const result = await pool.query('SELECT * FROM products WHERE id = $1', [id]);
+    const product = result.rows[0];
     
     if (!product) {
       return NextResponse.json({ error: 'Product not found' }, { status: 404 });
@@ -32,9 +37,9 @@ export async function DELETE(
 
   try {
     const { id } = await params;
-    const result = await sql('DELETE FROM products WHERE id = $1 RETURNING id', [id]);
+    const result = await pool.query('DELETE FROM products WHERE id = $1 RETURNING id', [id]);
     
-    if (result.length === 0) {
+    if (result.rows.length === 0) {
       return NextResponse.json({ error: 'Product not found' }, { status: 404 });
     }
     

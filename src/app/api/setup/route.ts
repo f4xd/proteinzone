@@ -1,12 +1,21 @@
 // filepath: frontend/src/app/api/setup/route.ts
 import { NextResponse } from 'next/server';
-import { sql } from '@vercel/postgres';
+import { Pool } from 'pg';
+
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL || process.env.POSTGRES_URL,
+  ssl: { rejectUnauthorized: false }
+});
 
 export async function GET() {
   try {
-    // Test connection first
-    await sql`SELECT 1`;
-    await sql(`
+    // Test connection
+    const client = await pool.connect();
+    await client.query('SELECT 1');
+    client.release();
+
+    // Create tables
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS products (
         id SERIAL PRIMARY KEY,
         name TEXT NOT NULL,
@@ -19,7 +28,7 @@ export async function GET() {
       )
     `);
 
-    await sql(`
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS orders (
         id SERIAL PRIMARY KEY,
         full_name TEXT NOT NULL,
@@ -33,9 +42,9 @@ export async function GET() {
     `);
 
     // Seed products if empty
-    const products = await sql('SELECT COUNT(*) as count FROM products');
+    const result = await pool.query('SELECT COUNT(*) as count FROM products');
     
-    if (products[0].count === 0) {
+    if (parseInt(result.rows[0].count) === 0) {
       const seedProducts = [
         { name: 'Whey Protein Pro', price: 4500, description: 'Premium whey protein for muscle building. 24g protein per serving.', image: 'https://images.unsplash.com/photo-1593095948071-474c5cc2989d?w=400', category: 'protein', stock: 50 },
         { name: 'Creatine Monohydrate', price: 2500, description: 'Pure creatine monohydrate for strength and power. 5g per serving.', image: 'https://images.unsplash.com/photo-1571019614242-c5c5dee9f50b?w=400', category: 'creatine', stock: 80 },
@@ -50,7 +59,7 @@ export async function GET() {
       ];
 
       for (const p of seedProducts) {
-        await sql(
+        await pool.query(
           `INSERT INTO products (name, price, description, image, category, stock, created_at)
            VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
           [p.name, p.price, p.description, p.image, p.category, p.stock]

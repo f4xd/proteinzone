@@ -1,6 +1,11 @@
 // filepath: frontend/src/app/api/orders/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { sql } from '@vercel/postgres';
+import { Pool } from 'pg';
+
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL || process.env.POSTGRES_URL,
+  ssl: { rejectUnauthorized: false }
+});
 
 // Security: Rate limiting
 const rateLimitStore = new Map();
@@ -37,8 +42,8 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const orders = await sql('SELECT * FROM orders ORDER BY created_at DESC');
-    return NextResponse.json(orders);
+    const result = await pool.query('SELECT * FROM orders ORDER BY created_at DESC');
+    return NextResponse.json(result.rows);
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
@@ -70,8 +75,8 @@ export async function POST(request: NextRequest) {
     for (const item of items) {
       if (!item.productId || !item.quantity) continue;
       
-      const products = await sql('SELECT * FROM products WHERE id = $1', [item.productId]);
-      const product = products[0];
+      const productResult = await pool.query('SELECT * FROM products WHERE id = $1', [item.productId]);
+      const product = productResult.rows[0];
       
       if (product) {
         const price = product.price;
@@ -91,7 +96,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Save order to database
-    const result = await sql(
+    const result = await pool.query(
       `INSERT INTO orders (full_name, phone, address, items, total_price, created_at)
        VALUES ($1, $2, $3, $4, $5, NOW())
        RETURNING id`,
@@ -100,7 +105,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       message: 'Order created successfully',
-      orderId: result[0].id,
+      orderId: result.rows[0].id,
       totalPrice: totalPrice
     }, { status: 201 });
   } catch (error: any) {

@@ -1,6 +1,11 @@
 // filepath: frontend/src/app/api/products/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { sql } from '@vercel/postgres';
+import { Pool } from 'pg';
+
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL || process.env.POSTGRES_URL,
+  ssl: { rejectUnauthorized: false }
+});
 
 // Security: Rate limiting (simple in-memory store)
 const rateLimitStore = new Map();
@@ -55,8 +60,8 @@ export async function GET(request: NextRequest) {
     }
     
     query += ' ORDER BY created_at DESC';
-    const products = await sql(query, params);
-    const mappedProducts = products.map((p: any) => ({ 
+    const result = await pool.query(query, params);
+    const mappedProducts = result.rows.map((p: any) => ({ 
       ...p, 
       _id: p.id,
       createdAt: p.created_at 
@@ -77,14 +82,14 @@ export async function POST(request: NextRequest) {
   try {
     const { name, price, description, image, category, stock } = await request.json();
     
-    const result = await sql(
+    const result = await pool.query(
       `INSERT INTO products (name, price, description, image, category, stock, created_at)
        VALUES ($1, $2, $3, $4, $5, $6, NOW())
        RETURNING *`,
       [name, price, description, image, category, stock || 100]
     );
     
-    const product = result[0];
+    const product = result.rows[0];
     return NextResponse.json({ ...product, _id: product.id }, { status: 201 });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 400 });
